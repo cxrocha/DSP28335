@@ -1,0 +1,1014 @@
+#include "DSP28x_Project.h"     // Device Headerfile and Examples Include File
+#include<math.h>
+
+long int c0, c1, c2;
+
+int ErroIa = 0;
+int ErroIb = 0;
+int ErroIc = 0;
+int ErroVa = 0;
+int ErroVb = 0;
+int ErroVc = 0;
+int ErrofaseA = 0;
+int ErrofaseB = 0;
+int ErrofaseC = 0;
+int ErroVsenoA = 0;
+int ErroVsenoB = 0;
+int ErroVsenoC = 0;
+
+// Variáveis pala a calibragem automática dos PIs do controle de tensão trifásico DQ
+int k;
+
+int i1 = 0; // Numero de tentativa de uma variavel 0..9
+int i2 = 0; // Numero da Variavel 0..7
+float TempErroVdq = 0;
+float SomaErroV0 = 0.;
+float SomaErroV1 = 0.;
+float SomaErroV2 = 0.;
+int indice;
+float temp0, temp1, temp2;
+long int PosFinal = 34999.;
+
+int ordem[4] = {0,1,2,3};
+
+float Nv[3] = {0., 0.07062444,   0.};     // Proporcional da malha de tensão
+float Dv[3] = {0., 2.390091e-05, 0.};     // Integral     da malha de tensão
+float Ni[3] = {0., 22.1236,      0.};     // Proporcional da malha de corrente
+float Di[3] = {0., 0.001269931,  0.};     // Integral     da malha de corrente
+
+//0.5, 5e-6, 6, 5e-3
+
+void PosicionaMelhorSolucao(int);
+void InicializaVetor(int);
+
+// Parâmetros do controle de tensão trifásico DQ
+float Ca,Cb,Cc,Sa,Sb,Sc;
+float Lim = 600;
+float VsenoA = 0;
+float VsenoB = 0;
+float VsenoC = 0;
+
+float EVd, EVq, EId, EIq;
+float VdCarga, VqCarga, IdL, IqL;
+static float E1Vd = 0.;
+static float SVd = 0.;
+static float E1Vq = 0.;
+static float SVq = 0.;
+static float E1Id = 0.;
+static float SId = 0.;
+static float E1Iq = 0.;
+static float SIq = 0.;
+
+
+float EVa, EVb, EVc, EIa, EIb, EIc;
+float VaCarga, VbCarga, VcCarga, IaL, IbL, IcL;
+
+//static float E1Va = 0.;
+//static float SVa = 0.;
+//static float E1Vb = 0.;
+//static float SVb = 0.;
+//static float E1Vc = 0.;
+//static float SVc = 0.;
+
+//static float E1Ia = 0.;
+//static float SIa = 0.;
+//static float E1Ib = 0.;
+//static float SIb = 0.;
+//static float E1Ic = 0.;
+//static float SIc = 0.;
+
+
+int N = 0;
+
+// Parâmetros do Seno PWM
+double faseA  = 0.;
+double faseB, faseC;
+double W       = 376991118e-6;
+double Ts      =  1e-4;
+double Tz      = 50e-6;
+int   offset  = 7500;
+int   amplitude;
+long int  j = 0;
+
+//Parâmetros para salto de fase
+float AnguloSalto = 0.78539816;          //Salto de fase de 45 graus: 0.78539816
+long int jSalto = 304500;               //0: Sem salto, 30166:Salto em após um ciclo
+
+//Parâmetros para alteração de frequencia
+float NovoW  = 345.575192;   //60 Hz: 376.99118, 55 Hz: 345.575192
+float jNovoW = 304500;            //0: Sem alteração, 30025:Alteração em 1,0025 segundos
+
+//Parâmetros para inclusão de nova carga
+long int jCarga = 34500;          //30000: Com nova carga  31000: Sem nova carga  , 30166: Nova carga após 1 ciclo
+
+
+//Parâmetros do MSOGI
+int correnteA[1000];
+int corrente1[1000];
+int corrente5[1000];
+//int corrente7[1000];
+//int    vetorW[1000];
+
+
+float raiz2 = 1.41421356;
+float raiz3 = 1.73205081;
+float raiz2_raiz3 = 0.816496;
+float t   = 1e-4;
+float t2  = 2e-4;
+float tt  = 1e-8;
+float tt2 = 2e-8;
+
+
+//Variaveis FLL
+float passo1 = 0.;
+float integra1 = 0.;
+float normalizacao, erro, passo, integra;
+
+//Variaves do Sogi de 60 Hz
+int MSogi = 0;
+float IalfaCarga, IbetaCarga;
+float k_60 = 1.414213;
+float w_60   = 376.99112;
+float k60_w60 = 533.145743;
+float vin_alfa_60, vout_alfa_60, qvout_alfa_60, erro_alfa_60;
+float vin_beta_60, vout_beta_60, qvout_beta_60, erro_beta_60;
+float vin_alfa1_60 = 0.;
+float vin_alfa2_60 = 0.;
+float vout_alfa1_60 = 0.;
+float vout_alfa2_60 = 0.;
+float qvin_alfa1_60 = 0.;
+float qvin_alfa2_60 = 0.;
+float qvout_alfa1_60 = 0.;
+float qvout_alfa2_60 = 0.;
+float erro_alfa1_60 = 0;
+float erro_alfa2_60 = 0;
+float vin_beta1_60 = 0.;
+float vin_beta2_60 = 0.;
+float vout_beta1_60 = 0.;
+float vout_beta2_60 = 0.;
+float qvin_beta1_60 = 0.;
+float qvin_beta2_60 = 0.;
+float qvout_beta1_60 = 0.;
+float qvout_beta2_60 = 0.;
+float erro_beta1_60 = 0;
+float erro_beta2_60 = 0;
+float v60_alfa_mais = 0.;
+float v60_beta_mais = 0.;
+
+
+//Variaves do Sogi de 300 Hz
+float k_300 = 0.282842;
+float w_300   = 1884.9556;
+float k300_w300 = 533.144612;
+float vin_alfa_300, vout_alfa_300, qvout_alfa_300, erro_alfa_300;
+float vin_beta_300, vout_beta_300, qvout_beta_300, erro_beta_300;
+float vin_alfa1_300 = 0.;
+float vin_alfa2_300 = 0.;
+float vout_alfa1_300 = 0.;
+float vout_alfa2_300 = 0.;
+float qvin_alfa1_300 = 0.;
+float qvin_alfa2_300 = 0.;
+float qvout_alfa1_300 = 0.;
+float qvout_alfa2_300 = 0.;
+float erro_alfa1_300 = 0;
+float erro_alfa2_300 = 0;
+float vin_beta1_300 = 0.;
+float vin_beta2_300 = 0.;
+float vout_beta1_300 = 0.;
+float vout_beta2_300 = 0.;
+float qvin_beta1_300 = 0.;
+float qvin_beta2_300 = 0.;
+float qvout_beta1_300 = 0.;
+float qvout_beta2_300 = 0.;
+float erro_beta1_300 = 0;
+float erro_beta2_300 = 0;
+float v300_alfa_menos = 0.;
+float v300_beta_menos = 0.;
+
+
+//Variaves do Sogi de 420 Hz
+float k_420 = 0.202030;
+float w_420   = 2638.9378;
+float k420_w420 = 533.144604;
+float vin_alfa_420, vout_alfa_420, qvout_alfa_420, erro_alfa_420;
+float vin_beta_420, vout_beta_420, qvout_beta_420, erro_beta_420;
+float vin_alfa1_420 = 0.;
+float vin_alfa2_420 = 0.;
+float vout_alfa1_420 = 0.;
+float vout_alfa2_420 = 0.;
+float qvin_alfa1_420 = 0.;
+float qvin_alfa2_420 = 0.;
+float qvout_alfa1_420 = 0.;
+float qvout_alfa2_420 = 0.;
+float erro_alfa1_420 = 0;
+float erro_alfa2_420 = 0;
+float vin_beta1_420 = 0.;
+float vin_beta2_420 = 0.;
+float vout_beta1_420 = 0.;
+float vout_beta2_420 = 0.;
+float qvin_beta1_420 = 0.;
+float qvin_beta2_420 = 0.;
+float qvout_beta1_420 = 0.;
+float qvout_beta2_420 = 0.;
+float erro_beta1_420 = 0;
+float erro_beta2_420 = 0;
+float v420_alfa_mais = 0.;
+float v420_beta_mais = 0.;
+
+float GanhoVa = 1;			//Fio verde
+float GanhoVb = 1;			//Fio amarelo
+
+float GanhoIa = 1;			//Fio verde
+float GanhoIb = 1;			//Fio amarelo
+
+int   IaLInt, IbLInt, IcLInt, IaCargaInt, IbCargaInt, IcCargaInt;
+float IaL1, IbL1, IcL1, IaL, IbL, IcL, IaCarga1, IbCarga1, IcCarga1, IaCarga, IbCarga, IcCarga;
+int   VaCargaInt, VbCargaInt, VcCargaInt;
+float VaCarga1, VbCarga1, VcCarga1, VaCarga, VbCarga, VcCarga;
+float ErroA = 0;
+float ErroB = 0;
+float ErroC = 0;
+
+float KProporcional, KIntegral;
+float Vq, PInstantanea, PMedia, IntegralPLL, ProporcionalPLL, WInicial, WPLL;
+
+void InicializaGPIO(void);
+void ConfiguraADC(void);
+void CalculaAngulo(void);
+void Sogi60Corrente(void);
+void Sogi300Corrente(void);
+void Sogi420Corrente(void);
+void InicializaPWM_ADC(void);
+void InicializaSenoPWM_FaseA(void);
+void InicializaSenoPWM_FaseB(void);
+void InicializaSenoPWM_FaseC(void);
+interrupt void MSogiCorrente(void);
+interrupt void InterrupcaoADC(void);
+interrupt void InterrupcaoSenoPWM_FaseA(void);
+interrupt void InterrupcaoSenoPWM_FaseB(void);
+interrupt void InterrupcaoSenoPWM_FaseC(void);
+
+void Espera(long);
+
+
+// Funções auxiliares
+
+void abc_alfabeta(float a, float b, float c, float *alfa, float *beta);
+void alfabeta_abc(float alfa, float beta, float *a, float *b, float *c);
+void sogi(float vin, float w, float *vout, float *qvout);
+
+
+void main(void)
+{
+   InitSysCtrl();		// Inicializa PLL, WatchDog e Clock dos perifericos
+   DINT;				// Desabilita todas as interrupções da CPU
+   InitPieCtrl();		// Inicializa todos os registros de interrupções na tabela PIE
+   IER = 0x0000;		// Limpa todas a interrupções da CPU
+   IFR = 0x0000;		// Limpa todos os FLAGS das interrupções da CPU
+   InitPieVectTable();	// Inicializa a tabela de interrupções PIE, mesmo que não seja usada no programa.
+   EALLOW;  			// Permite a escrita em registros protegidos
+   PieVectTable.EPWM2_INT = &InterrupcaoSenoPWM_FaseA;
+   PieVectTable.EPWM3_INT = &InterrupcaoSenoPWM_FaseB;
+   PieVectTable.EPWM4_INT = &InterrupcaoSenoPWM_FaseC;
+   PieVectTable.ADCINT    = &MSogiCorrente;
+   EDIS;    			// Não permite a escrita em registros protegidos
+   EALLOW;
+   SysCtrlRegs.PCLKCR0.bit.TBCLKSYNC = 0; //Desabilita Clock para ePWMx para que ele não comece a atuar antes do necessário
+   EDIS;
+
+   InicializaSenoPWM_FaseA(); //Configura o Módulo ePWM2
+   InicializaSenoPWM_FaseB(); //Configura o Módulo ePWM3
+   InicializaSenoPWM_FaseC(); //Configura o Módulo ePWM4
+
+   EALLOW;
+   SysCtrlRegs.PCLKCR0.bit.TBCLKSYNC = 1;//Habilita Clock para ePWMx
+   EDIS;
+
+   InitAdc();
+   ConfiguraADC();   //Configura o Módulo ADC
+
+   InicializaGPIO();	//Inicializa portas de entrada e saída
+   GpioDataRegs.GPADAT.bit.GPIO28 = 1;  // Liga contator permitindo a passagem da corrente sem passar pelo resistor
+   GpioDataRegs.GPADAT.bit.GPIO30 = 0;  // Desliga MOSFET contator inserindo a carga não linear no sistema.
+                                        // 0: Abre o circuito e tira a carga  1: Fechao circuito e coloca a carga
+
+   EALLOW;
+
+   //Configure ePWM-2 pins using GPIO regs
+   //Enable internal pull-up for the selected pins
+   GpioCtrlRegs.GPAPUD.bit.GPIO2 = 0;    // Enable pull-up on GPIO2 (EPWM2A)
+   GpioCtrlRegs.GPAPUD.bit.GPIO3 = 0;    // Enable pull-up on GPIO3 (EPWM2B)
+
+   GpioCtrlRegs.GPAMUX1.bit.GPIO2 = 1;   // Configure GPIO2 as EPWM2A
+   GpioCtrlRegs.GPAMUX1.bit.GPIO3 = 1;   // Configure GPIO3 as EPWM2B
+
+   //Configure ePWM-3 pins using GPIO regs
+   //Enable internal pull-up for the selected pins
+   GpioCtrlRegs.GPAPUD.bit.GPIO4 = 0;    // Enable pull-up on GPIO4 (EPWM3A)
+   GpioCtrlRegs.GPAPUD.bit.GPIO5 = 0;    // Enable pull-up on GPIO5 (EPWM3B)
+
+   GpioCtrlRegs.GPAMUX1.bit.GPIO4 = 1;   // Configure GPIO4 as EPWM3A
+   GpioCtrlRegs.GPAMUX1.bit.GPIO5 = 1;   // Configure GPIO5 as EPWM3B
+
+   //Configure ePWM-4 pins using GPIO regs (ADC)
+   //Enable internal pull-up for the selected pins
+   GpioCtrlRegs.GPAPUD.bit.GPIO6 = 0;    // Enable pull-up on GPIO6 (EPWM4A)
+   GpioCtrlRegs.GPAPUD.bit.GPIO7 = 0;    // Enable pull-up on GPIO7 (EPWM4B)
+
+   GpioCtrlRegs.GPAMUX1.bit.GPIO6 = 1;   // Configure GPIO6 as EPWM4A
+   GpioCtrlRegs.GPAMUX1.bit.GPIO7 = 1;   // Configure GPIO7 as EPWM4B
+
+   EDIS;
+
+   IER |= M_INT1;                       // Habilita INT1 na tabela PIE, onde está configurada o serviço ADC - Modulo 6 (Pag. 13)
+   PieCtrlRegs.PIEIER1.bit.INTx6 = 1;	// Habilita ADC na tabela PIE de interrupções - Modulo 6 (Pag. 13)
+
+   IER |= M_INT3;						// Habilita INT3 na tabela PIE, onde estão configuradas os serviços de interrupções Epwm1 a Epwm6 - Modulo 6 (Pag. 13)
+   PieCtrlRegs.PIEIER3.bit.INTx2 = 1;	// Habilita ePwm2 na tabela PIE de interrupções - Modulo 6 (Pag. 13)
+   PieCtrlRegs.PIEIER3.bit.INTx3 = 1;	// Habilita ePwm3 na tabela PIE de interrupções - Modulo 6 (Pag. 13)
+   PieCtrlRegs.PIEIER3.bit.INTx4 = 1;	// Habilita ePwm4 (ADC) na tabela PIE de interrupções - Modulo 6 (Pag. 13)
+
+   EINT;   // Habilita a chave geral de interrupções
+   ERTM;   // Habilita a chave geral de interrupções de tempo real
+
+   InicializaVetor(ordem[0]);
+   while(j < PosFinal) //loop infinito
+//   while(j>-1)
+   { if (MSogi == 1 )
+     {
+
+//	   temp0 = IaCarga; IaCarga = IcCarga; IcCarga = temp0;
+
+//  GpioDataRegs.GPADAT.bit.GPIO30 = 1;
+
+	   StartCpuTimer0();
+	   c0 = ReadCpuTimer0Counter();
+
+
+	   abc_alfabeta(IaCarga, IbCarga, IcCarga, &IalfaCarga, &IbetaCarga);
+	   vin_alfa_60 = IalfaCarga - v300_alfa_menos - v420_alfa_mais;
+	   vin_beta_60 = IbetaCarga - v300_beta_menos - v420_beta_mais;
+	   Sogi60Corrente();
+	   v60_alfa_mais = (vout_alfa_60  - qvout_beta_60) * 0.5;
+	   v60_beta_mais = (qvout_alfa_60 + vout_beta_60)  * 0.5;
+
+	   vin_alfa_300 = IalfaCarga - v60_alfa_mais - v420_alfa_mais;
+	   vin_beta_300 = IbetaCarga - v60_beta_mais - v420_beta_mais;
+	   Sogi300Corrente();
+	   v300_alfa_menos = (vout_alfa_300 + qvout_beta_300) * 0.5;
+	   v300_beta_menos = (vout_beta_300 - qvout_alfa_300) * 0.5;
+
+	   vin_alfa_420 = IalfaCarga - v60_alfa_mais - v300_alfa_menos;
+	   vin_beta_420 = IbetaCarga - v60_beta_mais - v300_beta_menos;
+	   Sogi420Corrente();
+	   v420_alfa_mais = (vout_alfa_420  - qvout_beta_420) * 0.5;
+	   v420_beta_mais = (qvout_alfa_420 + vout_beta_420)  * 0.5;
+
+	   c1 = ReadCpuTimer0Counter();
+	   c2 = c1 - c0;
+
+//  GpioDataRegs.GPADAT.bit.GPIO30 = 0;
+
+	   MSogi = 0;
+
+     }
+
+        asm(" NOP");
+   }
+   DINT;
+   N = 0;
+}
+
+
+void InicializaGPIO()
+{
+   EALLOW;
+// Inicializa porta para controle dos reles
+   GpioDataRegs.GPACLEAR.bit.GPIO28 = 1;   // Reset output latch
+   GpioCtrlRegs.GPAMUX2.bit.GPIO28  = 00;   //
+   GpioCtrlRegs.GPADIR.bit.GPIO28   = 1;   // GPIO28 = output
+   // Inicializa porta para controle dos reles
+   GpioDataRegs.GPACLEAR.bit.GPIO30 = 1;   // Reset output latch
+   GpioCtrlRegs.GPAMUX2.bit.GPIO30  = 00;   //
+   GpioCtrlRegs.GPADIR.bit.GPIO30   = 1;   // GPIO30 = output
+   EDIS;
+}
+
+
+
+//Coleta a amostragem dos sinais da corrente trifásica nas fases A, B e C da carga,
+//transformando o sinal amostrado (0 a 4095) em Volts
+void MSogiCorrente()
+{
+//////// Faz a mostragem dos sinais
+  IaLInt      = AdcRegs.ADCRESULT0  - 0x8000;
+  IbLInt      = AdcRegs.ADCRESULT1  - 0x8000;
+  IcLInt      = AdcRegs.ADCRESULT2  - 0x8000;
+  VaCargaInt  = AdcRegs.ADCRESULT3  - 0x8000;
+  VbCargaInt  = AdcRegs.ADCRESULT4  - 0x8000;
+  VcCargaInt  = AdcRegs.ADCRESULT5  - 0x8000;
+  IaCargaInt  = AdcRegs.ADCRESULT8  - 0x8000;
+  IbCargaInt  = AdcRegs.ADCRESULT9  - 0x8000;
+  IcCargaInt  = AdcRegs.ADCRESULT10 - 0x8000;
+//////// Converte o sinal amostrado no valor real da corrente
+  IaL1     = (float) (3.05175e-5 * IaLInt);
+  IbL1     = (float) (3.05175e-5 * IbLInt);
+  IcL1     = (float) (3.05175e-5 * IcLInt);
+  VaCarga1 = (float) (3.05175e-5 * VaCargaInt);
+  VbCarga1 = (float) (3.05175e-5 * VbCargaInt);
+  VcCarga1 = (float) (3.05175e-5 * VcCargaInt);
+  IaCarga1 = (float) (3.05175e-5 * IaCargaInt);
+  IbCarga1 = (float) (3.05175e-5 * IbCargaInt);
+  IcCarga1 = (float) (3.05175e-5 * IcCargaInt);
+
+//////// Aplica o fator multiplicador da placa de sinal
+
+  IaL = 12.809564 * (IaL1-0.0665);
+  IbL = 13.129102 * (IbL1-0.0558);
+  IcL = 12.90322  * (IcL1-0.0475);
+  VaCarga = 205.33881 * (VaCarga1-0.0564);
+  VbCarga = 209.39485 * (VbCarga1-0.10085);
+  VcCarga = 205.47945 * (VcCarga1-0.0500);
+  IaCarga  = 11.792111  * (IaCarga1-0.100);
+  IbCarga  = 12.284644  * (IbCarga1-0.100);
+  IcCarga  = 11.940298  * (IcCarga1-0.105);
+
+  faseA = faseA + W * Tz; //integral de w
+
+  if (faseA > 62831853071e-10) { faseA = faseA - 62831853071e-10; };
+  faseB = faseA - 20943951e-7;
+  faseC = faseA - 41887902e-7;
+
+// Constantes PI para controle dq
+//  nv = 1.;
+//  dv = 0.025/9;
+//  ni = 0.25;
+//  di = 0.015;
+
+  Ca = cos(faseA);
+  Cb = cos(faseB);
+  Cc = cos(faseC);
+
+  Sa = sin(faseA);
+  Sb = sin(faseB);
+  Sc = sin(faseC);
+
+  VdCarga = 666666666e-9 * (VaCarga * Ca + VbCarga * Cb + VcCarga * Cc);
+  VqCarga = 666666666e-9 * (VaCarga * Sa + VbCarga * Sb + VcCarga * Sc);
+
+  EVd = 0 - VdCarga;
+//  SVd = (Nv[indice]+Dv[indice]) * EVd - (Nv[indice]-Dv[indice]) * E1Vd + SVd;
+  SVd = (0.07062444+2.390091e-05) * EVd - (0.07062444-2.390091e-05) * E1Vd + SVd;
+  E1Vd = EVd;
+  if (SVd > +Lim) { SVd = +Lim; };
+  if (SVd < -Lim) { SVd = -Lim; };
+
+  EVq = 100 - VqCarga;
+//  SVq = (Nv[indice]+Dv[indice]) * EVq - (Nv[indice]-Dv[indice]) * E1Vq + SVq;
+  SVq = (0.07062444+2.390091e-05) * EVq - (0.07062444-2.390091e-05) * E1Vq + SVq;
+  E1Vq = EVq;
+  if (SVq > +Lim) { SVq = +Lim; };
+  if (SVq < -Lim) { SVq = -Lim; };
+
+  IdL = 666666666e-9 * (IaL * Ca + IbL * Cb + IcL * Cc);
+  IqL = 666666666e-9 * (IaL * Sa + IbL * Sb + IcL * Sc);
+
+  EId = SVd - IdL;
+//  SId = (Ni[indice]+Di[indice]) * EId - (Ni[indice]-Di[indice]) * E1Id + SId;
+  SId = (22.1236/2+0.00127) * EId - (22.1236/2-0.00127) * E1Id + SId;
+  E1Id = EId;
+  if (SId > +Lim) { SId = +Lim; };
+  if (SId < -Lim) { SId = -Lim; };
+
+  EIq = SVq - IqL;
+//  SIq = (Ni[indice]+Di[indice]) * EIq - (Ni[indice]-Di[indice]) * E1Iq + SIq;
+  SIq = (22.1236/2+0.00127) * EIq - (22.1236/2-0.00127) * E1Iq + SIq;
+  E1Iq = EIq;
+  if (SIq > +Lim) { SIq = +Lim; };
+  if (SIq < -Lim) { SIq = -Lim; };
+
+  VsenoA =  3750 + 5 * (SId * Ca + SIq * Sa);
+  VsenoB =  3750 + 5 * (SId * Cb + SIq * Sb);
+  VsenoC =  3750 + 5 * (SId * Cc + SIq * Sc);
+
+  if (VsenoA > 7250) { VsenoA = 7250; };
+  if (VsenoB > 7250) { VsenoB = 7250; };
+  if (VsenoC > 7250) { VsenoC = 7250; };
+  if (VsenoA < 250)  { VsenoA =  250; };
+  if (VsenoB < 250)  { VsenoB =  250; };
+  if (VsenoC < 250)  { VsenoC =  250; };
+
+//    Circuito Malha Aberta
+//  VsenoA = 3500 * Sa + 3750;
+//  VsenoB = 3500 * Sb + 3750;
+//  VsenoC = 3500 * Sc + 3750;
+
+  // Reinitialize for next ADC sequence
+  AdcRegs.ADCTRL2.bit.RST_SEQ1 = 1;			// Reset sequencer to state CONV00 - pag. 35 SPRU812A.pdf
+  AdcRegs.ADCST.bit.INT_SEQ1_CLR = 1;		// Clear INT SEQ1 bit
+  PieCtrlRegs.PIEACK.all = PIEACK_GROUP1;	// Acknowledge interrupt to PIE
+
+  // Testa frequencia de amostragem
+}
+
+
+//CALCULA O DUPLO SOGI PARA A FREQUENCIA DE 60 HERTZ
+//*************************************************//
+void Sogi60Corrente(void)
+{ float divisor;
+  float b0v,b2v,a1v,a2v;
+  float b0qv,b1qv,b2qv,a1qv,a2qv;
+//CALCULA SOGI ALFA 60
+  divisor = (4+k60_w60*t2+w_60*w_60*tt);
+  //Calcula vout Sogi Alfa 60
+  b0v = (k60_w60*t2)/divisor;
+  b2v = (-t2*k60_w60)/divisor;
+  a1v = (-8+w_60*w_60*tt2)/divisor;
+  a2v = (4-t2*k60_w60+w_60*w_60*tt)/divisor;
+
+  vout_alfa_60 = b0v*vin_alfa_60 + b2v*vin_alfa2_60 - a1v*vout_alfa1_60 - a2v*vout_alfa2_60;
+  vout_alfa2_60  = vout_alfa1_60;
+  vout_alfa1_60  = vout_alfa_60;
+//Calcula vout Sogi Alfa 60;
+  b0qv = (k60_w60*w_60*tt)/divisor;
+  b1qv = (k60_w60*w_60*tt2)/divisor;
+  b2qv = (k60_w60*w_60*tt)/divisor;
+  a1qv = a1v;
+  a2qv = a2v;
+
+  qvout_alfa_60 = b0qv*vin_alfa_60 + b1qv*vin_alfa1_60 + b2qv*vin_alfa2_60 - a1qv*qvout_alfa1_60 - a2qv*qvout_alfa2_60;
+  qvout_alfa2_60 = qvout_alfa1_60;
+  qvout_alfa1_60 = qvout_alfa_60;
+  erro_alfa_60 = vin_alfa_60 - vout_alfa_60;
+  vin_alfa2_60   = vin_alfa1_60;
+  vin_alfa1_60   = vin_alfa_60;
+
+//CALCULA SOGI BETA 60
+//Calcula vout Sogi Beta 60;
+  vout_beta_60 = b0v*vin_beta_60 + b2v*vin_beta2_60 - a1v*vout_beta1_60 - a2v*vout_beta2_60;
+  vout_beta2_60  = vout_beta1_60;
+  vout_beta1_60  = vout_beta_60;
+//Calcula qvout Sogi Beta 60;
+  qvout_beta_60 = b0qv*vin_beta_60 + b1qv*vin_beta1_60 + b2qv*vin_beta2_60 - a1qv*qvout_beta1_60 - a2qv*qvout_beta2_60;
+  qvout_beta2_60 = qvout_beta1_60;
+  qvout_beta1_60 = qvout_beta_60;
+  erro_beta_60 = vin_beta_60 - vout_beta_60;
+  vin_beta2_60   = vin_beta1_60;
+  vin_beta1_60   = vin_beta_60;
+
+//CALCULA FLL
+  normalizacao = (k60_w60) / (vout_alfa_60 * vout_alfa_60 + vout_beta_60 * vout_beta_60);
+  erro  = qvout_alfa_60 * erro_alfa_60 + qvout_beta_60 * erro_beta_60;
+  passo = -50 * erro * normalizacao;
+  integra = (t/2)*passo + (t/2)*passo1 - (-1*integra1);
+  w_60 = integra +  376.99112;
+  passo1 = passo;
+  integra1 = integra;
+}
+
+
+//CALCULA O DUPLO SOGI PARA A FREQUENCIA DE 300 HERTZ
+//*************************************************//
+
+void Sogi300Corrente(void)
+{ float divisor;
+  float b0v,b2v,a1v,a2v;
+  float b0qv,b1qv,b2qv,a1qv,a2qv;
+//CALCULA SOGI ALFA 300
+  divisor = (4+k300_w300*t2+w_300*w_300*tt);
+//Calcula vout Sogi Alfa 300
+  b0v = (k300_w300*t2)/divisor;
+  b2v = (-t2*k300_w300)/divisor;
+  a1v = (-8+w_300*w_300*tt2)/divisor;
+  a2v = (4-t2*k300_w300+w_300*w_300*tt)/divisor;
+  vout_alfa_300 = b0v*vin_alfa_300 + b2v*vin_alfa2_300 - a1v*vout_alfa1_300 - a2v*vout_alfa2_300;
+  vout_alfa2_300  = vout_alfa1_300;
+  vout_alfa1_300  = vout_alfa_300;
+//Calcula vout Sogi Alfa 300;
+  b0qv = (k300_w300*w_300*tt)/divisor;
+  b1qv = (k300_w300*w_300*tt2)/divisor;
+  b2qv = (k300_w300*w_300*tt)/divisor;
+  a1qv = a1v;
+  a2qv = a2v;
+  qvout_alfa_300  = b0qv*vin_alfa_300 + b1qv*vin_alfa1_300 + b2qv*vin_alfa2_300 - a1qv*qvout_alfa1_300 - a2qv*qvout_alfa2_300;
+  qvout_alfa2_300 = qvout_alfa1_300;
+  qvout_alfa1_300 = qvout_alfa_300;
+  erro_alfa_300   = vin_alfa_300 - vout_alfa_300;
+  vin_alfa2_300   = vin_alfa1_300;
+  vin_alfa1_300   = vin_alfa_300;
+
+//CALCULA SOGI BETA 300
+//Calcula vout Sogi Beta 300;
+  vout_beta_300   = b0v*vin_beta_300 + b2v*vin_beta2_300 - a1v*vout_beta1_300 - a2v*vout_beta2_300;
+  vout_beta2_300  = vout_beta1_300;
+  vout_beta1_300  = vout_beta_300;
+//Calcula qvout Sogi Beta 300;
+  qvout_beta_300  = b0qv*vin_beta_300 + b1qv*vin_beta1_300 + b2qv*vin_beta2_300 - a1qv*qvout_beta1_300 - a2qv*qvout_beta2_300;
+  qvout_beta2_300 = qvout_beta1_300;
+  qvout_beta1_300 = qvout_beta_300;
+  erro_beta_300   = vin_beta_300 - vout_beta_300;
+  vin_beta2_300   = vin_beta1_300;
+  vin_beta1_300   = vin_beta_300;
+}
+
+
+//CALCULA O DUPLO SOGI PARA A FREQUENCIA DE 420 HERTZ
+//*************************************************//
+
+void Sogi420Corrente(void)
+{ float divisor;
+  float b0v,b2v,a1v,a2v;
+  float b0qv,b1qv,b2qv,a1qv,a2qv;
+//CALCULA SOGI ALFA 420
+  divisor = (4+k420_w420*t2+w_420*w_420*tt);
+//Calcula vout Sogi Alfa 420
+  b0v = (k420_w420*t2)/divisor;
+  b2v = (-t2*k420_w420)/divisor;
+  a1v = (-8+w_420*w_420*tt2)/divisor;
+  a2v = (4-t2*k420_w420+w_420*w_420*tt)/divisor;
+  vout_alfa_420 = b0v*vin_alfa_420 + b2v*vin_alfa2_420 - a1v*vout_alfa1_420 - a2v*vout_alfa2_420;
+  vout_alfa2_420  = vout_alfa1_420;
+  vout_alfa1_420  = vout_alfa_420;
+//Calcula vout Sogi Alfa 420;
+  b0qv = (k420_w420*w_420*tt)/divisor;
+  b1qv = (k420_w420*w_420*tt2)/divisor;
+  b2qv = (k420_w420*w_420*tt)/divisor;
+  a1qv = a1v;
+  a2qv = a2v;
+  qvout_alfa_420  = b0qv*vin_alfa_420 + b1qv*vin_alfa1_420 + b2qv*vin_alfa2_420 - a1qv*qvout_alfa1_420 - a2qv*qvout_alfa2_420;
+  qvout_alfa2_420 = qvout_alfa1_420;
+  qvout_alfa1_420 = qvout_alfa_420;
+  erro_alfa_420   = vin_alfa_420 - vout_alfa_420;
+  vin_alfa2_420   = vin_alfa1_420;
+  vin_alfa1_420   = vin_alfa_420;
+
+//CALCULA SOGI BETA 420
+//Calcula vout Sogi Beta 420;
+  vout_beta_420   = b0v*vin_beta_420 + b2v*vin_beta2_420 - a1v*vout_beta1_420 - a2v*vout_beta2_420;
+  vout_beta2_420  = vout_beta1_420;
+  vout_beta1_420  = vout_beta_420;
+//Calcula qvout Sogi Beta 420;
+  qvout_beta_420  = b0qv*vin_beta_420 + b1qv*vin_beta1_420 + b2qv*vin_beta2_420 - a1qv*qvout_beta1_420 - a2qv*qvout_beta2_420;
+  qvout_beta2_420 = qvout_beta1_420;
+  qvout_beta1_420 = qvout_beta_420;
+  erro_beta_420   = vin_beta_420 - vout_beta_420;
+  vin_beta2_420   = vin_beta1_420;
+  vin_beta1_420   = vin_beta_420;
+}
+
+
+void abc_alfabeta(float a, float b, float c, float *alfa, float *beta)
+{
+  *alfa = (raiz2_raiz3) * (a - (b * 0.5) - (c * 0.5));
+  *beta = (raiz2_raiz3) * (raiz3 * b * 0.5 - raiz3 * c * 0.5);
+
+}
+
+
+void alfabeta_abc(float alfa, float beta, float *a, float *b, float *c)
+{
+  *a = raiz2_raiz3 * (alfa);
+  *b = raiz2_raiz3 * (- alfa * 0.5 + raiz3 * beta * 0.5);
+  *c = raiz2_raiz3 * (- alfa * 0.5 - raiz3 * beta * 0.5);
+}
+
+
+
+void InicializaSenoPWM_FaseA()
+{
+   //Veja a definicao destas constantes em DSP2833x_EPwm_defines.h
+   //    ou na página 18 do manual sprug04a.pdf
+   EPwm2Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN; // Count up and down mode
+   EPwm2Regs.TBPRD = 7499;                     // Set timer period (150MHz / 10KHz)
+   EPwm2Regs.TBCTL.bit.PHSEN = TB_DISABLE;    // Disable phase loading
+   EPwm2Regs.TBPHS.half.TBPHS = 0x0000;       // Phase is 0
+   EPwm2Regs.TBCTR = 0x0000;                  // Clear counter
+   EPwm2Regs.TBCTL.bit.HSPCLKDIV = 0;         // Clock = SYSCLKOUT/(CLKDIV*HSPCLKDIV)  0->HSPCLKDIV=1
+   EPwm2Regs.TBCTL.bit.CLKDIV = 0;            //                                       0->ClkDiv=1
+                                              //CLKPWM=SYSCLKOUT=150MHz                fref_pwm=150MHz/15000=10kHz
+   // Setup shadow register load on ZERO
+   EPwm2Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW; // Modo de duplo buffer de comparação ativado p/ CMPA
+   EPwm2Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW; // Modo de duplo buffer de comparação ativado p/ CMPB
+   EPwm2Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;// Recarga do CMPA ocorre qdo TBcounter=0
+   EPwm2Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;//Recarga do CMPB ocorre qdo TBcounter=0
+
+   // Set Compare values
+   EPwm2Regs.CMPA.half.CMPA = 3750;             // Set compare A value (50% do período)
+   EPwm2Regs.CMPB           = 3750;             // Set Compare B value (50% do período)
+
+   EPwm2Regs.AQCTLA.bit.CAU = AQ_SET;
+   EPwm2Regs.AQCTLA.bit.CAD = AQ_CLEAR;
+   EPwm2Regs.AQCTLB.bit.CBU = AQ_CLEAR;
+   EPwm2Regs.AQCTLB.bit.CBD = AQ_SET;
+
+   // Interrupt where we will change the Compare Values
+   EPwm2Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event (qdo contador =0)
+   EPwm2Regs.ETSEL.bit.INTEN = 1;                // Enable INT
+   EPwm2Regs.ETPS.bit.INTPRD = ET_1ST;           // Generate an interrupt on the first event
+
+   // Interrupts are disable
+   // Only SOCA (ADC trigger) is enable
+   EPwm2Regs.ETSEL.bit.SOCAEN = 1;        // Enable SOC on A group
+   EPwm2Regs.ETSEL.bit.SOCASEL = 2;       // Select SOC on period
+   EPwm2Regs.ETPS.bit.SOCAPRD = 1;        // Generate pulse on 1st event
+
+   // Only SOCB (ADC trigger) is enable
+   EPwm2Regs.ETSEL.bit.SOCBEN = 1;        // Enable SOC on B group
+   EPwm2Regs.ETSEL.bit.SOCBSEL = 1;       // Select SOC on zero
+   EPwm2Regs.ETPS.bit.SOCBPRD = 1;        // Generate pulse on 1st event
+}
+
+
+void InicializaSenoPWM_FaseB()
+{
+   //Veja a definicao destas constantes em DSP2833x_EPwm_defines.h
+   //    ou na página 18 do manual sprug04a.pdf
+   EPwm3Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN; // Count up and down mode
+   EPwm3Regs.TBPRD = 7499;                    // Set timer period (150MHz / 10KHz)
+   EPwm3Regs.TBCTL.bit.PHSEN = TB_DISABLE;    // Disable phase loading
+   EPwm3Regs.TBPHS.half.TBPHS = 0x0000;       // Phase is 0
+   EPwm3Regs.TBCTR = 0x0000;                  // Clear counter
+   EPwm3Regs.TBCTL.bit.HSPCLKDIV = 0;         // Clock = SYSCLKOUT/(CLKDIV*HSPCLKDIV)  0->HSPCLKDIV=1
+   EPwm3Regs.TBCTL.bit.CLKDIV = 0;            //                                       0->ClkDiv=1
+                                              //CLKPWM=SYSCLKOUT=150MHz                //fref_pwm=150MHz/15000=10kHz
+   // Setup shadow register load on ZERO
+   EPwm3Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW; // Modo de duplo buffer de comparação ativado p/ CMPA
+   EPwm3Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW; // Modo de duplo buffer de comparação ativado p/ CMPB
+   EPwm3Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;// Recarga do CMPA ocorre qdo TBcounter=0
+   EPwm3Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;//Recarga do CMPB ocorre qdo TBcounter=0
+
+   // Set Compare values
+   EPwm3Regs.CMPA.half.CMPA = 3750;             // Set compare A value (50% do período)
+   EPwm3Regs.CMPB           = 3750;             // Set Compare B value (50% do período)
+
+   EPwm3Regs.AQCTLA.bit.CAU = AQ_SET;
+   EPwm3Regs.AQCTLA.bit.CAD = AQ_CLEAR;
+   EPwm3Regs.AQCTLB.bit.CBU = AQ_CLEAR;
+   EPwm3Regs.AQCTLB.bit.CBD = AQ_SET;
+
+
+   // Interrupt where we will change the Compare Values
+   EPwm3Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event (qdo contador =0)
+   EPwm3Regs.ETSEL.bit.INTEN = 1;                // Enable INT
+   EPwm3Regs.ETPS.bit.INTPRD = ET_1ST;           // Generate an interrupt on the first event
+}
+
+void InicializaSenoPWM_FaseC()
+{
+   //Veja a definicao destas constantes em DSP2833x_EPwm_defines.h
+   //    ou na página 18 do manual sprug04a.pdf
+   EPwm4Regs.TBCTL.bit.CTRMODE = TB_COUNT_UPDOWN; // Count up and down mode
+   EPwm4Regs.TBPRD = 7499;                    // Set timer period (150MHz / 10KHz)
+   EPwm4Regs.TBCTL.bit.PHSEN = TB_DISABLE;    // Disable phase loading
+   EPwm4Regs.TBPHS.half.TBPHS = 0x0000;       // Phase is 0
+   EPwm4Regs.TBCTR = 0x0000;                  // Clear counter
+   EPwm4Regs.TBCTL.bit.HSPCLKDIV = 0;         // Clock = SYSCLKOUT/(CLKDIV*HSPCLKDIV)  0->HSPCLKDIV=1
+   EPwm4Regs.TBCTL.bit.CLKDIV = 0;            //                                       0->ClkDiv=1
+                                              //CLKPWM=SYSCLKOUT=150MHz                //fref_pwm=150MHz/15000=10kHz
+   // Setup shadow register load on ZERO
+   EPwm4Regs.CMPCTL.bit.SHDWAMODE = CC_SHADOW; // Modo de duplo buffer de comparação ativado p/ CMPA
+   EPwm4Regs.CMPCTL.bit.SHDWBMODE = CC_SHADOW; // Modo de duplo buffer de comparação ativado p/ CMPB
+   EPwm4Regs.CMPCTL.bit.LOADAMODE = CC_CTR_ZERO;// Recarga do CMPA ocorre qdo TBcounter=0
+   EPwm4Regs.CMPCTL.bit.LOADBMODE = CC_CTR_ZERO;//Recarga do CMPB ocorre qdo TBcounter=0
+
+   // Set Compare values
+   EPwm4Regs.CMPA.half.CMPA = 3750;             // Set compare A value (50% do período)
+   EPwm4Regs.CMPB           = 3750;             // Set Compare B value (50% do período)
+
+   EPwm4Regs.AQCTLA.bit.CAU = AQ_SET;
+   EPwm4Regs.AQCTLA.bit.CAD = AQ_CLEAR;
+   EPwm4Regs.AQCTLB.bit.CBU = AQ_CLEAR;
+   EPwm4Regs.AQCTLB.bit.CBD = AQ_SET;
+
+
+   // Interrupt where we will change the Compare Values
+   EPwm4Regs.ETSEL.bit.INTSEL = ET_CTR_ZERO;     // Select INT on Zero event (qdo contador =0)
+   EPwm4Regs.ETSEL.bit.INTEN = 1;                // Enable INT
+   EPwm4Regs.ETPS.bit.INTPRD = ET_1ST;           // Generate an interrupt on the first event
+}
+
+
+
+interrupt void InterrupcaoADC(void)  //taxa de requisicao=10kHz
+{
+   // Clear INT flag for this timer
+   EPwm2Regs.ETCLR.bit.INT = 1;
+   // Informa a CPU que esta interrupção foi concluida
+   PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
+}
+
+
+
+void PosicionaMelhorSolucao(int Variavel)
+{ if ((SomaErroV1 <= SomaErroV0) && (SomaErroV1 <= SomaErroV2))
+  {	 if (Variavel == 0) { temp0=Nv[0]; temp1=Nv[1]; temp2=Nv[2]; Nv[2] = temp1+(temp2-temp1)/2 ; Nv[0] = temp1-(temp1-temp0)/2; };
+	 if (Variavel == 1) { temp0=Dv[0]; temp1=Dv[1]; temp2=Dv[2]; Dv[2] = temp1+(temp2-temp1)/2 ; Dv[0] = temp1-(temp1-temp0)/2; };
+	 if (Variavel == 2) { temp0=Ni[0]; temp1=Ni[1]; temp2=Ni[2]; Ni[2] = temp1+(temp2-temp1)/2 ; Ni[0] = temp1-(temp1-temp0)/2; };
+	 if (Variavel == 3) { temp0=Di[0]; temp1=Di[1]; temp2=Di[2]; Di[2] = temp1+(temp2-temp1)/2 ; Di[0] = temp1-(temp1-temp0)/2; };
+  };
+  if ((SomaErroV0 <= SomaErroV1) && (SomaErroV0 <= SomaErroV2))
+  {	 if (Variavel == 0) { temp0=Nv[0]; temp1=Nv[1]; temp2=Nv[2]; Nv[2] = temp1; Nv[1] = temp0; Nv[0] = temp0 - (temp1-temp0)/2; };
+	 if (Variavel == 1) { temp0=Dv[0]; temp1=Dv[1]; temp2=Dv[2]; Dv[2] = temp1; Dv[1] = temp0; Dv[0] = temp0 - (temp1-temp0)/2; };
+	 if (Variavel == 2) { temp0=Ni[0]; temp1=Ni[1]; temp2=Ni[2]; Ni[2] = temp1; Ni[1] = temp0; Ni[0] = temp0 - (temp1-temp0)/2; };
+	 if (Variavel == 3) { temp0=Di[0]; temp1=Di[1]; temp2=Di[2]; Di[2] = temp1; Di[1] = temp0; Di[0] = temp0 - (temp1-temp0)/2; };
+  };
+  if ((SomaErroV2 <= SomaErroV0) && (SomaErroV2 <= SomaErroV1))
+  {	 if (Variavel == 0) { temp0=Nv[0]; temp1=Nv[1]; temp2=Nv[2]; Nv[0] = temp1; Nv[1] = temp2; Nv[2] = temp2 + (temp1-temp0)/2; };
+	 if (Variavel == 1) { temp0=Dv[0]; temp1=Dv[1]; temp2=Dv[2]; Dv[0] = temp1; Dv[1] = temp2; Dv[2] = temp2 + (temp1-temp0)/2; };
+	 if (Variavel == 2) { temp0=Ni[0]; temp1=Ni[1]; temp2=Ni[2]; Ni[0] = temp1; Ni[1] = temp2; Ni[2] = temp2 + (temp1-temp0)/2; };
+	 if (Variavel == 3) { temp0=Di[0]; temp1=Di[1]; temp2=Di[2]; Di[0] = temp1; Di[1] = temp2; Di[2] = temp2 + (temp1-temp0)/2; };
+  };
+}
+
+void InicializaVetor(int Variavel)
+{ Nv[0] = Nv[1]; Nv[2] = Nv[1];
+  Dv[0] = Dv[1]; Dv[2] = Dv[1];
+  Ni[0] = Ni[1]; Ni[2] = Ni[1];
+  Di[0] = Di[1]; Di[2] = Di[1];
+  if (Variavel == 0) { Nv[0] = Nv[1]-(Nv[1]*0.5); Nv[2] = Nv[1]+(Nv[1]*0.5); };
+  if (Variavel == 1) { Dv[0] = Dv[1]-(Dv[1]*0.5); Dv[2] = Dv[1]+(Dv[1]*0.5); };
+  if (Variavel == 2) { Ni[0] = Ni[1]-(Ni[1]*0.5); Ni[2] = Ni[1]+(Ni[1]*0.5); };
+  if (Variavel == 3) { Di[0] = Di[1]-(Di[1]*0.5); Di[2] = Di[1]+(Di[1]*0.5); };
+}
+
+
+interrupt void InterrupcaoSenoPWM_FaseA(void)  //taxa de requisicao=10kHz
+{
+  // Testa frequencia de chaveamento
+//	GpioDataRegs.GPADAT.bit.GPIO30 = 1;
+
+	///////   Armazena dados em vetores  //
+	  if (j==jCarga) GpioDataRegs.GPADAT.bit.GPIO30 = 1;  // 0: Abre o circuito e tira a carga  1: Fechao circuito e coloca a carga
+
+//      if (j == (5000+i2*30000+i1*3000+2999)) { PosicionaMelhorSolucao(ordem[i2]); };
+
+/*
+
+      // Altera os valores de PI, para a PRIMEIRA posição do vetor de comparação
+      if (j ==  ((long int) (5000 + (long int) (i2*60000) + i1*6000)))
+	  { indice = 0;
+	    SomaErroV0 = 0.;
+	  };
+
+      if ((j >=  ((long int) (5000 + (long int) (i2*60000) + i1*6000 + 1000))) && ((j < ((long int) (5000 + (long int) (i2*60000) + i1*6000 + 2000)))))
+	  { SomaErroV0 = SomaErroV0 + fabsf(EVd) + fabsf(EVq);
+
+	  };
+
+	    // Altera os valores de PI, para a SEGUNDA posição do vetor de comparação
+	  if (j == ((long int) (5000 + (long int) (i2*60000) + i1*6000 + 2000)))
+	  { indice = 1;
+	    SomaErroV1 = 0.;
+	  };
+
+	  if ((j >= ((long int) (5000 + (long int) (i2*60000) + i1*6000 + 3000))) && (j < ((long int) (5000 + (long int) (i2*60000) + i1*6000 + 4000))))
+	  { SomaErroV1 = SomaErroV1 + fabsf(EVd) + fabsf(EVq);
+	  };
+
+	    // Altera os valores de PI, para a TERCEIRA posição do vetor de comparação
+	  if (j == ((long int) (5000 + (long int) (i2*60000) + i1*6000 + 4000)))
+	  { indice = 2;
+	    SomaErroV2 = 0.;
+	  };
+
+	  if ((j >= ((long int) (5000 + (long int) (i2*60000) + i1*6000+5000))) && (j < ((long int) (5000+(long int) (i2*60000) + i1*6000 + 6000))))
+	  { SomaErroV2 = SomaErroV2 + fabsf(EVd) + fabsf(EVq);
+	  };
+
+*/
+
+	  j = j + 1.;
+
+/*
+	  if (j > 5000.)
+	  	{ if (floor((j-11000.)/6000.) == (j-11000.)/6000.)
+	         { PosicionaMelhorSolucao(ordem[i2]);
+	  	       i1++;
+	           if (i1 == 10.)
+	             { i2++;
+	               InicializaVetor(ordem[i2]);
+	               i1 = 0.;
+	             };
+	         };
+	     };
+
+*/
+
+
+	  if ((j>=(PosFinal-1000.)) && (j<(PosFinal)))
+	  {
+
+// 	     correnteA[(int) (j-(PosFinal-1000))] = (int) (IaCarga * 100);
+//		 corrente1[(int) (j-(PosFinal-1000))] = (int) (IbCarga * 100);
+//		 corrente5[(int) (j-(PosFinal-1000))] = (int) (IcCarga * 100);
+
+		 correnteA[(int) (j-(PosFinal-1000))] = (int) (v60_alfa_mais   * 100);
+		 corrente1[(int) (j-(PosFinal-1000))] = (int) (v300_alfa_menos * 100);
+		 corrente5[(int) (j-(PosFinal-1000))] = (int) (v420_alfa_mais  * 100);
+
+//		 correnteA[(int) (j-(PosFinal-1000))] = (int) (w_60 * 10);
+	  };
+	  if (j==jSalto)
+	  { faseA = faseA + AnguloSalto;
+	    faseB = faseB + AnguloSalto;
+	    faseC = faseC + AnguloSalto;
+	  };
+
+	  if (j==jNovoW) W = NovoW;
+
+      EPwm2Regs.CMPA.half.CMPA =  VsenoA;
+      EPwm2Regs.CMPB           =  VsenoA;
+
+      MSogi = 1;
+
+      // Clear INT flag for this timer
+   EPwm2Regs.ETCLR.bit.INT = 1;
+   // Informa a CPU que esta interrupção foi concluida
+   PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
+
+   // Testa frequencia de chaveamento
+//    GpioDataRegs.GPADAT.bit.GPIO30 = 0;
+
+}
+
+
+interrupt void InterrupcaoSenoPWM_FaseB(void)  //taxa de requisicao=10kHz
+{
+	// Testa frequencia de chaveamento
+//	GpioDataRegs.GPADAT.bit.GPIO30 = 1;
+
+	// Update the CMPA and CMPB values
+      EPwm3Regs.CMPA.half.CMPA =  VsenoB;
+      EPwm3Regs.CMPB           =  VsenoB;
+
+   // Clear INT flag for this timer
+   EPwm3Regs.ETCLR.bit.INT = 1;
+   // Informa a CPU que esta interrupção foi concluida
+   PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
+
+   // Testa frequencia de chaveamento
+//    GpioDataRegs.GPADAT.bit.GPIO30 = 0;
+
+}
+
+
+interrupt void InterrupcaoSenoPWM_FaseC(void)  //taxa de requisicao=10kHz
+{
+    // Testa frequencia de chaveamento
+//	GpioDataRegs.GPADAT.bit.GPIO30 = 1;
+
+	// Update the CMPA and CMPB values
+      EPwm4Regs.CMPA.half.CMPA =  VsenoC;
+      EPwm4Regs.CMPB           =  VsenoC;
+
+   // Clear INT flag for this timer
+   EPwm4Regs.ETCLR.bit.INT = 1;
+   // Informa a CPU que esta interrupção foi concluida
+   PieCtrlRegs.PIEACK.all = PIEACK_GROUP3;
+
+   // Testa frequencia de chaveamento
+//    GpioDataRegs.GPADAT.bit.GPIO30 = 0;
+
+}
+
+
+void ConfiguraADC(void)
+{
+	// Define a frequencia de amostragem
+    AdcRegs.ADCTRL1.bit.CPS = 0;           // CPS=0    pag. 38 SPRU812A.pdf
+    AdcRegs.ADCTRL3.bit.ADCCLKPS = 0x3;    // Setup ADCCLK = HSPCLK/[6*(CPS + 1)] pag. 38 SPRU812A.pdf
+                                          // -> HSPCLK=75Mhz -> ADCCLK=12.5Mhz
+    //Define o tempo em que o chave de aquisição vai ficar coletando o sinal.
+    AdcRegs.ADCTRL1.bit.ACQ_PS=3;          // Acquisition window size (duration the sampling switch is closed)
+                                          // sample time = ACQ_PS(ADCTRL1[11:8]) + 1 times the ADCLK period.
+                                          // 4*1/12.5MHz = 320nS
+
+    // Cascate Mode
+    AdcRegs.ADCTRL1.bit.SEQ_CASC = 1;
+    AdcRegs.ADCTRL2.bit.SOC_SEQ1 = 1;
+    AdcRegs.ADCTRL2.bit.SOC_SEQ2 = 1;
+
+    //Define o numero de aquisições
+    AdcRegs.ADCMAXCONV.all = 0x000B;       // Setup 6 conv's on SEQ1
+    AdcRegs.ADCCHSELSEQ1.bit.CONV00 = 0x0; // Setup ADCINA0 as 1st SEQ1 conv.
+    AdcRegs.ADCCHSELSEQ1.bit.CONV01 = 0x1; // Setup ADCINA1 as 2nd SEQ1 conv.
+    AdcRegs.ADCCHSELSEQ1.bit.CONV02 = 0x2; // Setup ADCINA2 as 3st SEQ1 conv.
+    AdcRegs.ADCCHSELSEQ1.bit.CONV03 = 0x3; // Setup ADCINA3 as 4nd SEQ1 conv.
+    AdcRegs.ADCCHSELSEQ2.bit.CONV04 = 0x4; // Setup ADCINA4 as 5st SEQ1 conv.
+    AdcRegs.ADCCHSELSEQ2.bit.CONV05 = 0x5; // Setup ADCINA5 as 6nd SEQ1 conv.
+    AdcRegs.ADCCHSELSEQ2.bit.CONV06 = 0x6; // Setup ADCINA6 as 6nd SEQ1 conv.
+    AdcRegs.ADCCHSELSEQ2.bit.CONV07 = 0x7; // Setup ADCINA6 as 6nd SEQ1 conv.
+    AdcRegs.ADCCHSELSEQ3.bit.CONV08 = 0x8;
+    AdcRegs.ADCCHSELSEQ3.bit.CONV09 = 0x9;
+    AdcRegs.ADCCHSELSEQ3.bit.CONV10 = 0xA;
+
+    AdcRegs.ADCTRL2.bit.EPWM_SOCA_SEQ1 = 1;  //Enable SOCA from ePWM to start SEQ1
+    AdcRegs.ADCTRL2.bit.INT_ENA_SEQ1   = 1;  //Enable SEQ1 interrupt (every EOS)
+
+
+    AdcRegs.ADCTRL2.bit.EPWM_SOCB_SEQ  = 1;
+//    AdcRegs.ADCTRL2.bit.EPWM_SOCB_SEQ2 = 1;  //Enable SOCA from ePWM to start SEQ1
+    AdcRegs.ADCTRL2.bit.INT_ENA_SEQ2   = 1;  //Enable SEQ1 interrupt (every EOS)
+
+}
+
